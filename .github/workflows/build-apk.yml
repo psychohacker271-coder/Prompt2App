@@ -53,13 +53,14 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.10.2'
+          gradle-version: '9.3.1'
 
       - name: Build debug APK
         shell: bash
         run: |
           set -euo pipefail
           cd "$PROJECT_DIR"
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
           yes | sdkmanager --licenses >/dev/null || true
           gradle --no-daemon assembleDebug
 
