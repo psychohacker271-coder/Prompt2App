@@ -1,0 +1,70 @@
+name: Build Prompt2App APK
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '*.zip'
+      - '.github/workflows/build-apk.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Extract uploaded project
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP_FILE="$(find . -maxdepth 1 -type f -iname '*.zip' | head -n 1)"
+          if [ -z "$ZIP_FILE" ]; then
+            echo "No project ZIP found in the repository root."
+            exit 1
+          fi
+          mkdir -p extracted
+          unzip -q "$ZIP_FILE" -d extracted
+          PROJECT_DIR="$(find extracted -type f \( -name settings.gradle -o -name settings.gradle.kts \) -printf '%h\n' | head -n 1)"
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "No Android/Gradle project (settings.gradle or settings.gradle.kts) was found inside the ZIP."
+            echo "The archive may be a web project rather than a native Android Studio project."
+            find extracted -maxdepth 3 -type f | head -n 100
+            exit 1
+          fi
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Found Gradle project at: $PROJECT_DIR"
+
+      - name: Build debug APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_DIR"
+          if [ ! -f ./gradlew ]; then
+            echo "Gradle wrapper (gradlew) is missing from the project."
+            exit 1
+          fi
+          chmod +x ./gradlew
+          yes | sdkmanager --licenses >/dev/null || true
+          ./gradlew --no-daemon assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Prompt2App-debug-apk
+          path: |
+            ${{ env.PROJECT_DIR }}/**/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 7
